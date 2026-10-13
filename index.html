@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Último Trem SP</title>
+<meta name="description" content="Planejador de viagem e atlas do último trem do Metrô, CPTM e linhas concedidas de São Paulo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+html{color-scheme:light dark}body{margin:0}
+/* Layout: mapa da rede como palco; painel de viagem à esquerda (abaixo no celular); régua do dia sob o mapa. */
+:root{
+  --bg:#0A0E16; --surface:#111726; --surface2:#182035; --rule:#242F48;
+  --fg:#E8EDF6; --muted:#8C98AF; --accent:#F5A524; --accent-ink:#1A1205;
+  --ok:#3FC481; --warn:#F5A524; --end:#F0596A; --you:#5AA9FF;
+  --map:#0A0E16; --river:#13213D; --dead:#283149; --st:#0A0E16;
+  --f-display:"Archivo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-body:"Archivo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#EEF1F5; --surface:#FFFFFF; --surface2:#E7EBF1; --rule:#D3DAE4;
+    --fg:#111827; --muted:#596476; --accent:#B86E00; --accent-ink:#FFFFFF;
+    --ok:#17834F; --warn:#B86E00; --end:#C4283C; --you:#1D6FE0;
+    --map:#F4F6F9; --river:#D9E4F1; --dead:#CDD4DE; --st:#FFFFFF;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#EEF1F5; --surface:#FFFFFF; --surface2:#E7EBF1; --rule:#D3DAE4;
+  --fg:#111827; --muted:#596476; --accent:#B86E00; --accent-ink:#FFFFFF;
+  --ok:#17834F; --warn:#B86E00; --end:#C4283C; --you:#1D6FE0;
+  --map:#F4F6F9; --river:#D9E4F1; --dead:#CDD4DE; --st:#FFFFFF;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45;overflow:hidden}
+*{box-sizing:border-box}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:grid;grid-template-columns:392px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"top top" "panel map" "panel time"}
+.top{grid-area:top;display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:34px;height:34px;border-radius:50%;border:2.5px solid var(--fg);display:grid;place-items:center;font-family:var(--f-display);font-weight:900;font-size:12px;font-stretch:80%;flex:none}
+.brand h1{margin:0;font-family:var(--f-display);font-weight:850;font-stretch:118%;font-size:17px;letter-spacing:.01em;line-height:1.05;text-transform:uppercase}
+.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-stretch:100%;font-weight:500}
+.count{font-family:var(--f-mono);font-size:11px;color:var(--muted);line-height:1.25;text-align:right}
+.count b{color:var(--fg);font-size:13px;font-weight:600}
+.controls{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chips{display:flex;gap:4px;background:var(--surface2);padding:3px;border-radius:999px}
+.chip{border:0;background:transparent;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.chip24{border:1px dashed var(--rule);background:transparent;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.chip24[aria-pressed="true"]{border-style:solid;border-color:var(--accent);color:var(--accent)}
+.iconbtn{width:32px;height:32px;border-radius:50%;border:1px solid var(--rule);background:transparent;display:grid;place-items:center;flex:none}
+.iconbtn svg{width:16px;height:16px}
+
+.mapwrap{grid-area:map;position:relative;min-height:0;background:var(--map);overflow:hidden}
+#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#map.drag{cursor:grabbing}
+#map.picking{cursor:crosshair}
+.zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:34px;height:34px;border-radius:8px;border:1px solid var(--rule);background:var(--surface);font-weight:700;font-size:16px;display:grid;place-items:center}
+.zoom button svg{width:16px;height:16px}
+.hint{position:absolute;left:12px;bottom:12px;max-width:min(320px,calc(100% - 70px));background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.hint b{color:var(--fg)}
+.pickbar{position:absolute;left:12px;right:58px;top:12px;display:flex;align-items:center;gap:10px;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:8px 8px 8px 12px;font-weight:700;font-size:13px}
+.pickbar button{margin-left:auto;border:0;background:rgba(0,0,0,.18);color:inherit;border-radius:8px;padding:5px 10px;font-weight:700;font-size:12px}
+
+.time{grid-area:time;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:10px 16px 12px;border-top:1px solid var(--rule);background:var(--surface)}
+.clock{font-family:var(--f-display);font-weight:800;font-stretch:112%;font-size:34px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em;min-width:3.4ch}
+.clock small{display:block;font-family:var(--f-body);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-stretch:100%;margin-bottom:4px}
+.rail{min-width:0;display:flex;flex-direction:column;gap:4px}
+.summary{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.summary b{color:var(--fg)}
+.track{position:relative;height:30px}
+.track input{position:absolute;inset:0;width:100%;margin:0;appearance:none;-webkit-appearance:none;background:transparent;height:30px}
+.track input::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--rule) 0 var(--night),var(--fg) var(--night) var(--mid),var(--dead) var(--mid) 100%)}
+.track input::-moz-range-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--rule) 0 var(--night),var(--fg) var(--night) var(--mid),var(--dead) var(--mid) 100%)}
+.track input::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid var(--surface);margin-top:-8px;box-shadow:0 0 0 1px var(--accent)}
+.track input::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:3px solid var(--surface)}
+.ticks{position:relative;height:14px;font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.ticks span.mid{color:var(--accent);font-weight:600}
+.tbtns{display:flex;gap:6px}
+.play{width:40px;height:40px;border-radius:50%;border:0;background:var(--fg);color:var(--bg);display:grid;place-items:center}
+.play svg{width:16px;height:16px}
+.now{height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--rule);background:transparent;font-size:12px;font-weight:600}
+
+.panel{grid-area:panel;min-height:0;overflow:auto;border-right:1px solid var(--rule);background:var(--bg);padding:0 16px 24px;display:flex;flex-direction:column}
+.tabs{position:sticky;top:0;z-index:6;display:flex;gap:2px;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--rule);margin-bottom:12px}
+.tab{flex:1;border:0;background:transparent;padding:8px 6px;border-radius:8px;font-weight:700;font-size:13px;color:var(--muted);letter-spacing:.02em}
+.tab[aria-selected="true"]{background:var(--surface2);color:var(--fg)}
+.pane{display:flex;flex-direction:column;gap:10px}
+.eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.group{display:flex;flex-direction:column;gap:2px}
+.group+.group{margin-top:10px}
+
+.badge{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 4px;border-radius:50%;font-family:var(--f-display);font-weight:850;font-size:12.5px;font-stretch:90%;flex:none;border:2.5px solid var(--lc);color:var(--fg);background:var(--surface)}
+.badge.sm{min-width:20px;height:20px;font-size:10.5px;border-width:2px}
+.lrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 6px;border-bottom:1px solid var(--rule)}
+.lrow .nm{font-weight:700;font-size:13.5px;line-height:1.2}
+.lrow .sub{font-size:11.5px;color:var(--muted);line-height:1.3}
+.lrow .rt{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.lrow .big{font-size:15px;font-weight:600;color:var(--fg)}
+.lrow .rt small{display:block;font-size:10.5px;color:var(--muted);font-family:var(--f-body)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.end{color:var(--end)}.pill.off{color:var(--muted)}
+
+.field{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;position:relative}
+.field label{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.field input{width:100%;height:42px;border-radius:10px;border:1px solid var(--rule);background:var(--surface);padding:0 12px;font-size:14px}
+.field.you input{border-color:var(--you)}
+.res{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:8;background:var(--surface);border:1px solid var(--rule);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.28);max-height:300px;overflow:auto;padding:4px}
+.res button{display:flex;width:100%;align-items:center;gap:8px;border:0;background:transparent;padding:8px;border-radius:8px;text-align:left;min-width:0}
+.res button:hover,.res button.on{background:var(--surface2)}
+.res .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+.res .ty{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap;display:flex;gap:3px;align-items:center}
+.res .ai{color:var(--accent);font-weight:700}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);font-size:12px;font-weight:600}
+.tbtn svg{width:14px;height:14px}
+.tbtn.live{border-color:var(--you);color:var(--you)}
+.ends{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.ends .stack{display:flex;flex-direction:column;gap:8px;min-width:0}
+.swap{width:40px;height:40px;border-radius:10px;border:1px solid var(--rule);background:var(--surface);display:grid;place-items:center}
+.swap svg{width:16px;height:16px}
+
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:12px 14px}
+.sthead{display:flex;flex-direction:column;gap:6px}
+.sthead h2{margin:0;font-family:var(--f-display);font-weight:850;font-stretch:112%;font-size:22px;line-height:1.1;text-wrap:balance}
+.badges{display:flex;gap:4px;flex-wrap:wrap}
+.drow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:7px 0;border-top:1px solid var(--rule);align-items:baseline}
+.drow:first-of-type{border-top:0}
+.drow .to{font-size:13px}
+.drow .to span{color:var(--muted);font-size:11.5px;display:block}
+.drow .tt{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:600}
+.drow .tt small{display:block;font-family:var(--f-body);font-size:11px;font-weight:600}
+.svhead{display:flex;align-items:center;gap:8px;margin-top:4px;font-weight:700;font-size:13px}
+.note{font-size:12px;color:var(--muted);margin:0}
+.note.warn{color:var(--warn)}
+.note b{color:var(--fg)}
+.reach{display:flex;align-items:baseline;gap:8px}
+.reach b{font-family:var(--f-display);font-weight:850;font-stretch:112%;font-size:28px;font-variant-numeric:tabular-nums}
+.btn{height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--rule);background:var(--surface2);font-weight:700;font-size:13px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg{display:flex;gap:4px;background:var(--surface2);padding:3px;border-radius:10px}
+.seg button{flex:1;border:0;background:transparent;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:700;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--rule)}
+
+.lead{font-family:var(--f-display);font-weight:850;font-stretch:112%;font-size:30px;line-height:1.05;font-variant-numeric:tabular-nums}
+.lead small{display:block;font-family:var(--f-body);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-stretch:100%}
+.meta{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:6px}
+.meta b{color:var(--fg);font-family:var(--f-mono);font-weight:600}
+.steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;padding:10px 0;border-top:1px solid var(--rule);align-items:start}
+.step .ic{width:26px;height:26px;display:grid;place-items:center;color:var(--muted)}
+.step .ic svg{width:17px;height:17px}
+.step .ic.end{color:var(--accent)}
+.step h4{margin:0;font-size:14px;font-weight:700;line-height:1.3}
+.step p{margin:2px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
+.step .t{font-family:var(--f-mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;padding-top:1px}
+.step.down h4{font-weight:600}
+.flag{color:var(--accent);font-weight:700}
+.alt{display:flex;flex-direction:column;gap:2px}
+.links{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.links a{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--rule);font-size:12px;font-weight:600;color:var(--fg);text-decoration:none}
+
+details.about{margin-top:18px;border-top:1px solid var(--rule);padding-top:12px}
+details.about summary{cursor:pointer;font-weight:700;font-size:13px}
+details.about p, details.about li{font-size:12.5px;color:var(--muted);max-width:62ch}
+details.about ul{padding-left:18px;margin:6px 0}
+details.about a{color:var(--fg)}
+
+@media (max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(200px,38%) auto minmax(0,1fr);grid-template-areas:"top" "map" "time" "panel"}
+  .top{gap:8px 10px;padding:8px 16px}
+  .count{display:none}
+  .controls{margin-left:0;width:100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .controls::-webkit-scrollbar{display:none}
+  .brand{flex:1}
+  .panel{border-right:0}
+  .clock{font-size:28px}
+  .time{gap:10px;padding:8px 16px 10px}
+  .now{padding:0 10px}
+  .hint{display:none}
+  .tabs{padding-block:10px 8px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">0h</div>
+      <div><h1>Último Trem SP</h1><small>Metrô · CPTM · concessionárias</small></div>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="controls">
+      <div class="chips" role="group" aria-label="Tipo de dia">
+        <button class="chip" id="d0" data-day="0" aria-pressed="true">Dia útil</button>
+        <button class="chip" id="d1" data-day="1" aria-pressed="false">Sábado</button>
+        <button class="chip" id="d2" data-day="2" aria-pressed="false">Domingo</button>
+      </div>
+      <button class="chip24" id="m24" aria-pressed="false" hidden title="Operação experimental do Metrô nas madrugadas de sábado para domingo">Madrugada 24h</button>
+      <button class="iconbtn" id="themeBtn" aria-label="Alternar tema claro/escuro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    </div>
+  </header>
+
+  <main class="mapwrap">
+    <canvas id="map" aria-label="Mapa da rede sobre trilhos de São Paulo"></canvas>
+    <div class="pickbar" id="pickbar" hidden><span id="pickTxt">Toque no mapa onde você está</span><button id="pickCancel">Cancelar</button></div>
+    <div class="zoom">
+      <button id="zin" aria-label="Aproximar">+</button>
+      <button id="zout" aria-label="Afastar">−</button>
+      <button id="zfit" aria-label="Ver rede inteira"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+    <div class="hint" id="hint">Toque numa estação para usá-la na viagem. Arraste a régua para ver a rede em outro horário.</div>
+  </main>
+
+  <section class="time" aria-label="Hora simulada">
+    <div class="clock"><small>Hora</small><span id="clock">13:00</span></div>
+    <div class="rail">
+      <div class="summary" id="summary"></div>
+      <div class="track"><input type="range" id="tr" min="240" max="1530" step="1" value="780" aria-label="Hora do dia"></div>
+      <div class="ticks" id="ticks"></div>
+    </div>
+    <div class="tbtns">
+      <button class="play" id="play" aria-label="Reproduzir o dia"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+      <button class="now" id="nowBtn">Agora</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="t-viagem" aria-selected="true" data-tab="viagem">Viagem</button>
+      <button class="tab" role="tab" id="t-estacao" aria-selected="false" data-tab="estacao">Estação</button>
+      <button class="tab" role="tab" id="t-linhas" aria-selected="false" data-tab="linhas">Linhas</button>
+    </div>
+
+    <div class="pane" id="p-viagem">
+      <div class="ends">
+        <div class="stack">
+          <div class="field" id="ff"><label for="fq">De onde</label><input id="fq" placeholder="Bairro, cidade, lugar ou estação" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="fres"><div class="res" id="fres" hidden></div></div>
+          <div class="tools">
+            <button class="tbtn" id="gpsBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Usar meu GPS</span></button>
+            <button class="tbtn" id="pickFrom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Marcar no mapa</button>
+          </div>
+          <p class="note warn" id="gpsMsg" hidden></p>
+          <div class="field" id="tf"><label for="tq">Para onde</label><input id="tq" placeholder="Para onde você vai?" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="tres"><div class="res" id="tres" hidden></div></div>
+          <div class="tools"><button class="tbtn" id="pickTo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Marcar destino no mapa</button></div>
+        </div>
+        <button class="swap" id="swap" aria-label="Inverter origem e destino"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg></button>
+      </div>
+      <div class="seg" role="group" aria-label="Horário de saída">
+        <button id="wNow" aria-pressed="true">Sair agora</button>
+        <button id="wSlider" aria-pressed="false">Sair às <span id="wT">23:30</span> (régua)</button>
+      </div>
+      <div id="vbody"></div>
+    </div>
+
+    <div class="pane" id="p-estacao" hidden>
+      <div class="field"><label for="stq">Buscar estação</label><input id="stq" placeholder="Ex.: Sé, Pinheiros, Brás" autocomplete="off"><div class="res" id="sres" hidden></div></div>
+      <div id="stbody"></div>
+    </div>
+
+    <div class="pane" id="p-linhas" hidden></div>
+
+    <details class="about">
+      <summary>Como os horários são calculados</summary>
+      <p>Os horários são <b>estimativas</b>. O app usa a regra de operação de cada linha (abertura, fechamento do embarque e últimos trens saindo dos terminais no horário de fechamento), intervalos aproximados por faixa do dia e o tempo entre estações calculado pela distância. Caminhadas usam 4,8 km/h com um acréscimo de 30% pelo traçado das ruas.</p>
+      <ul>
+        <li>Metrô (1, 2, 3, 15), ViaQuatro (4) e ViaMobilidade (5): 4h40–0h.</li>
+        <li>TIC Trens (7), ViaMobilidade (8, 9) e CPTM (10–13): 4h–0h. Linhas 7, 10 e 11 partem de Palmeiras-Barra Funda.</li>
+        <li>Linha 17-Ouro: 6h–22h, seg–sáb, sem cobrança (desde 30/set). A operação plena até 0h está prevista para outubro.</li>
+        <li>Linha 6-Laranja: trecho João Paulo I–Perdizes em operação assistida, 10h–15h em dias úteis.</li>
+        <li>Madrugada 24h: operação experimental do Metrô (L1, L2, L3, L15) de sábado para domingo, com trens a cada 20–30 min e baldeação para as outras linhas fechada. Confirme se continua valendo.</li>
+        <li>Lapa (L7 ↔ L8) e Água Branca (L6 ↔ L7) exigem sair de uma estação e entrar na outra.</li>
+        <li>A busca de lugares usa uma lista própria de bairros, cidades e pontos conhecidos. Endereços fora dela podem ser localizados pelo Claude, de forma aproximada.</li>
+        <li>O GPS depende do navegador permitir a localização. Dentro do app do Claude ele pode ser bloqueado; nesse caso marque o ponto no mapa.</li>
+      </ul>
+      <p>Obras, greves e operações especiais mudam tudo isso. Antes de contar com o último trem, confira: <a href="https://www.metro.sp.gov.br" target="_blank" rel="noopener">metro.sp.gov.br</a> · <a href="https://www.cptm.sp.gov.br" target="_blank" rel="noopener">cptm.sp.gov.br</a> · <a href="https://www.viamobilidade.com.br" target="_blank" rel="noopener">viamobilidade.com.br</a> · <a href="https://www.viaquatro.com.br" target="_blank" rel="noopener">viaquatro.com.br</a> · <a href="https://www.tictrens.com.br" target="_blank" rel="noopener">tictrens.com.br</a></p>
+    </details>
+  </aside>
+</div>
+
+<script id="core">
+/* ===== Dados da rede (coordenadas aproximadas) ===== */
+const ST={
+'Tucuruvi':[-23.4802,-46.6034],'Parada Inglesa':[-23.4877,-46.6089],'Jardim São Paulo-Ayrton Senna':[-23.4924,-46.6165],'Santana':[-23.5025,-46.6249],'Carandiru':[-23.5089,-46.6248],'Portuguesa-Tietê':[-23.5165,-46.6252],'Armênia':[-23.5254,-46.6294],'Tiradentes':[-23.5310,-46.6319],'Luz':[-23.5359,-46.6339],'São Bento':[-23.5442,-46.6338],'Sé':[-23.5503,-46.6334],'Japão-Liberdade':[-23.5555,-46.6355],'São Joaquim':[-23.5616,-46.6382],'Vergueiro':[-23.5690,-46.6400],'Paraíso':[-23.5754,-46.6409],'Ana Rosa':[-23.5813,-46.6380],'Vila Mariana':[-23.5893,-46.6346],'Santa Cruz':[-23.5990,-46.6370],'Praça da Árvore':[-23.6105,-46.6378],'Saúde':[-23.6184,-46.6391],'São Judas':[-23.6259,-46.6409],'Conceição':[-23.6355,-46.6412],'Jabaquara':[-23.6457,-46.6412],
+'Vila Madalena':[-23.5463,-46.6909],'Sumaré':[-23.5506,-46.6779],'Clínicas':[-23.5544,-46.6706],'Consolação':[-23.5579,-46.6612],'Trianon-Masp':[-23.5616,-46.6562],'Brigadeiro':[-23.5684,-46.6476],'Chácara Klabin':[-23.5926,-46.6293],'Santos-Imigrantes':[-23.5960,-46.6205],'Alto do Ipiranga':[-23.6025,-46.6127],'Sacomã':[-23.6017,-46.6022],'Tamanduateí':[-23.5935,-46.5895],'Vila Prudente':[-23.5847,-46.5812],
+'Palmeiras-Barra Funda':[-23.5254,-46.6670],'Marechal Deodoro':[-23.5338,-46.6564],'Santa Cecília':[-23.5393,-46.6502],'República':[-23.5443,-46.6428],'Anhangabaú':[-23.5475,-46.6392],'Pedro II':[-23.5495,-46.6256],'Brás':[-23.5476,-46.6155],'Bresser-Mooca':[-23.5466,-46.6070],'Belém':[-23.5428,-46.5895],'Tatuapé':[-23.5403,-46.5762],'Carrão':[-23.5379,-46.5640],'Penha':[-23.5335,-46.5422],'Vila Matilde':[-23.5318,-46.5307],'Guilhermina-Esperança':[-23.5293,-46.5164],'Patriarca':[-23.5310,-46.5018],'Artur Alvim':[-23.5404,-46.4846],'Corinthians-Itaquera':[-23.5425,-46.4714],
+'Higienópolis-Mackenzie':[-23.5486,-46.6524],'Paulista':[-23.5554,-46.6620],'Oscar Freire':[-23.5605,-46.6718],'Fradique Coutinho':[-23.5664,-46.6844],'Faria Lima':[-23.5674,-46.6936],'Pinheiros':[-23.5671,-46.7017],'Butantã':[-23.5720,-46.7080],'São Paulo-Morumbi':[-23.5866,-46.7232],'Vila Sônia':[-23.5992,-46.7357],
+'Capão Redondo':[-23.6600,-46.7682],'Campo Limpo':[-23.6492,-46.7586],'Vila das Belezas':[-23.6405,-46.7470],'Giovanni Gronchi':[-23.6439,-46.7337],'Santo Amaro':[-23.6548,-46.7192],'Largo Treze':[-23.6536,-46.7095],'Adolfo Pinheiros':[-23.6500,-46.7040],'Alto da Boa Vista':[-23.6416,-46.6993],'Borba Gato':[-23.6356,-46.6944],'Brooklin':[-23.6265,-46.6884],'Campo Belo':[-23.6185,-46.6816],'Eucaliptos':[-23.6098,-46.6703],'Moema':[-23.6021,-46.6626],'AACD-Servidor':[-23.5975,-46.6528],'Hospital São Paulo':[-23.5983,-46.6440],
+'João Paulo I':[-23.4905,-46.6975],'Freguesia do Ó':[-23.5006,-46.6971],'Santa Marina':[-23.5107,-46.6915],'Água Branca':[-23.5205,-46.6895],'Sesc-Pompeia':[-23.5262,-46.6832],'Perdizes':[-23.5330,-46.6780],
+'Lapa':[-23.5195,-46.7025],'Piqueri':[-23.5030,-46.7200],'Pirituba':[-23.4893,-46.7268],'Vila Clarice':[-23.4795,-46.7380],'Jaraguá':[-23.4590,-46.7490],'Vila Aurora':[-23.4490,-46.7570],'Perus':[-23.4040,-46.7540],'Caieiras':[-23.3649,-46.7420],'Franco da Rocha':[-23.3290,-46.7240],'Baltazar Fidélis':[-23.3130,-46.7390],'Francisco Morato':[-23.2810,-46.7450],'Botujuru':[-23.2510,-46.7610],'Campo Limpo Paulista':[-23.2090,-46.7870],'Várzea Paulista':[-23.2110,-46.8270],'Jundiaí':[-23.1860,-46.8800],
+'Júlio Prestes':[-23.5344,-46.6395],'Domingos de Moraes':[-23.5260,-46.7160],'Imperatriz Leopoldina':[-23.5280,-46.7300],'Presidente Altino':[-23.5330,-46.7640],'Osasco':[-23.5280,-46.7760],'Comandante Sampaio':[-23.5270,-46.7880],'Quitaúna':[-23.5250,-46.8010],'General Miguel Costa':[-23.5250,-46.8140],'Carapicuíba':[-23.5210,-46.8360],'Santa Terezinha':[-23.5160,-46.8500],'Antônio João':[-23.5120,-46.8650],'Barueri':[-23.5100,-46.8770],'Jardim Belval':[-23.5130,-46.8920],'Jardim Silveira':[-23.5160,-46.9030],'Jandira':[-23.5260,-46.9030],'Sagrado Coração':[-23.5300,-46.9140],'Engenheiro Cardoso':[-23.5330,-46.9270],'Itapevi':[-23.5470,-46.9340],'Amador Bueno':[-23.5600,-46.9650],
+'Ceasa':[-23.5410,-46.7470],'Villa-Lobos-Jaguaré':[-23.5480,-46.7300],'Cidade Universitária':[-23.5560,-46.7120],'Hebraica-Rebouças':[-23.5740,-46.6950],'Cidade Jardim':[-23.5860,-46.6930],'Vila Olímpia':[-23.5950,-46.6880],'Berrini':[-23.6080,-46.6950],'Morumbi':[-23.6216,-46.6992],'Granja Julieta':[-23.6370,-46.7050],'João Dias':[-23.6440,-46.7120],'Socorro':[-23.6670,-46.7110],'Jurubatuba':[-23.6810,-46.7020],'Autódromo':[-23.6990,-46.6990],'Primavera-Interlagos':[-23.7130,-46.6930],'Grajaú':[-23.7350,-46.6960],'Bruno Covas-Mendes-Vila Natal':[-23.7580,-46.6970],'Varginha':[-23.7810,-46.6930],
+'Juventus-Mooca':[-23.5603,-46.6097],'Ipiranga':[-23.5850,-46.6040],'São Caetano do Sul':[-23.6175,-46.5658],'Utinga':[-23.6280,-46.5480],'Prefeito Saladino':[-23.6390,-46.5380],'Santo André':[-23.6560,-46.5300],'Capuava':[-23.6660,-46.4980],'Mauá':[-23.6680,-46.4610],'Guapituba':[-23.6800,-46.4420],'Ribeirão Pires':[-23.7110,-46.4130],'Rio Grande da Serra':[-23.7440,-46.3970],
+'Dom Bosco':[-23.5440,-46.4560],'José Bonifácio':[-23.5480,-46.4380],'Guaianases':[-23.5420,-46.4150],'Antonio Gianetti Neto':[-23.5380,-46.3930],'Ferraz de Vasconcelos':[-23.5410,-46.3700],'Poá':[-23.5260,-46.3450],'Calmon Viana':[-23.5250,-46.3330],'Suzano':[-23.5430,-46.3110],'Jundiapeba':[-23.5450,-46.2550],'Braz Cubas':[-23.5340,-46.2210],'Mogi das Cruzes':[-23.5200,-46.1870],'Estudantes':[-23.5120,-46.1700],
+'Engenheiro Goulart':[-23.4920,-46.5210],'USP Leste':[-23.4850,-46.5010],'Comendador Ermelino':[-23.4890,-46.4810],'São Miguel Paulista':[-23.4930,-46.4440],'Jardim Helena-Vila Mara':[-23.4890,-46.4250],'Itaim Paulista':[-23.4960,-46.4010],'Jardim Romano':[-23.4940,-46.3870],'Engenheiro Manoel Feio':[-23.4900,-46.3700],'Itaquaquecetuba':[-23.4870,-46.3480],'Aracaré':[-23.5010,-46.3350],
+'Guarulhos-Cecap':[-23.4560,-46.5050],'Aeroporto-Guarulhos':[-23.4330,-46.4880],
+'Oratório':[-23.5893,-46.5703],'São Lucas':[-23.5952,-46.5604],'Camilo Haddad':[-23.6003,-46.5508],'Vila Tolstói':[-23.6044,-46.5404],'Vila União':[-23.6066,-46.5281],'Jardim Planalto':[-23.6071,-46.5170],'Sapopemba':[-23.6080,-46.5065],'Fazenda da Juta':[-23.6078,-46.4950],'São Mateus':[-23.6118,-46.4789],'Jardim Colonial':[-23.6103,-46.4645],
+'Chucri Zaidan':[-23.6234,-46.6939],'Vila Cordeiro':[-23.6229,-46.6876],'Vereador José Diniz':[-23.6200,-46.6745],'Brooklin Paulista':[-23.6236,-46.6655],'Aeroporto de Congonhas':[-23.6268,-46.6575],'Washington Luís':[-23.6390,-46.6650]
+};
+/* hw: intervalo noturno estimado [útil, sábado, domingo]; v: velocidade comercial km/h; O: abertura (min); off: deslocamento visual */
+const LINES=[
+{id:'1',nm:'Azul',op:'Metrô',c:'#0455A1',cd:'#3B82E6',v:35,hw:[6,7,8],O:280,off:0,m24:true,hours:'4h40–0h',svc:[['Tucuruvi','Parada Inglesa','Jardim São Paulo-Ayrton Senna','Santana','Carandiru','Portuguesa-Tietê','Armênia','Tiradentes','Luz','São Bento','Sé','Japão-Liberdade','São Joaquim','Vergueiro','Paraíso','Ana Rosa','Vila Mariana','Santa Cruz','Praça da Árvore','Saúde','São Judas','Conceição','Jabaquara']]},
+{id:'2',nm:'Verde',op:'Metrô',c:'#007E5E',cd:'#20A87F',v:35,hw:[6,7,8],O:280,off:0,m24:true,hours:'4h40–0h',svc:[['Vila Madalena','Sumaré','Clínicas','Consolação','Trianon-Masp','Brigadeiro','Paraíso','Ana Rosa','Chácara Klabin','Santos-Imigrantes','Alto do Ipiranga','Sacomã','Tamanduateí','Vila Prudente']]},
+{id:'3',nm:'Vermelha',op:'Metrô',c:'#EE372F',cd:'#F2534B',v:40,hw:[6,7,8],O:280,off:0,m24:true,hours:'4h40–0h',svc:[['Palmeiras-Barra Funda','Marechal Deodoro','Santa Cecília','República','Anhangabaú','Sé','Pedro II','Brás','Bresser-Mooca','Belém','Tatuapé','Carrão','Penha','Vila Matilde','Guilhermina-Esperança','Patriarca','Artur Alvim','Corinthians-Itaquera']]},
+{id:'4',nm:'Amarela',op:'ViaQuatro',c:'#E3B900',cd:'#FFD400',v:34,hw:[6,7,8],O:280,off:0,hours:'4h40–0h',svc:[['Luz','República','Higienópolis-Mackenzie','Paulista','Oscar Freire','Fradique Coutinho','Faria Lima','Pinheiros','Butantã','São Paulo-Morumbi','Vila Sônia']]},
+{id:'5',nm:'Lilás',op:'ViaMobilidade',c:'#9B3894',cd:'#C25CBA',v:38,hw:[6,7,8],O:280,off:0,hours:'4h40–0h',svc:[['Capão Redondo','Campo Limpo','Vila das Belezas','Giovanni Gronchi','Santo Amaro','Largo Treze','Adolfo Pinheiros','Alto da Boa Vista','Borba Gato','Brooklin','Campo Belo','Eucaliptos','Moema','AACD-Servidor','Hospital São Paulo','Santa Cruz','Chácara Klabin']]},
+{id:'6',nm:'Laranja',op:'Linha Uni',c:'#F68B1F',cd:'#F68B1F',v:34,hw:[8,8,8],O:600,off:0,l6:true,hours:'10h–15h, dias úteis (operação assistida)',svc:[['João Paulo I','Freguesia do Ó','Santa Marina','Água Branca','Sesc-Pompeia','Perdizes']]},
+{id:'7',nm:'Rubi',op:'TIC Trens',c:'#CA016B',cd:'#E8338A',v:50,hw:[15,20,20],O:240,off:1,hours:'4h–0h',svc:[['Palmeiras-Barra Funda','Água Branca','Lapa','Piqueri','Pirituba','Vila Clarice','Jaraguá','Vila Aurora','Perus','Caieiras','Franco da Rocha','Baltazar Fidélis','Francisco Morato','Botujuru','Campo Limpo Paulista','Várzea Paulista','Jundiaí']]},
+{id:'8',nm:'Diamante',op:'ViaMobilidade',c:'#8A938B',cd:'#A9B2AA',v:38,hw:[12,15,15],O:240,off:-1,hours:'4h–0h',svc:[['Júlio Prestes','Palmeiras-Barra Funda','Lapa','Domingos de Moraes','Imperatriz Leopoldina','Presidente Altino','Osasco','Comandante Sampaio','Quitaúna','General Miguel Costa','Carapicuíba','Santa Terezinha','Antônio João','Barueri','Jardim Belval','Jardim Silveira','Jandira','Sagrado Coração','Engenheiro Cardoso','Itapevi','Amador Bueno']]},
+{id:'9',nm:'Esmeralda',op:'ViaMobilidade',c:'#01A9A7',cd:'#1CC6C3',v:42,hw:[10,12,15],O:240,off:0,hours:'4h–0h',svc:[['Osasco','Presidente Altino','Ceasa','Villa-Lobos-Jaguaré','Cidade Universitária','Pinheiros','Hebraica-Rebouças','Cidade Jardim','Vila Olímpia','Berrini','Morumbi','Granja Julieta','João Dias','Santo Amaro','Socorro','Jurubatuba','Autódromo','Primavera-Interlagos','Grajaú','Bruno Covas-Mendes-Vila Natal','Varginha']]},
+{id:'10',nm:'Turquesa',op:'CPTM',c:'#049FC3',cd:'#2BBDE0',v:42,hw:[15,20,20],O:240,off:-1,hours:'4h–0h',svc:[['Palmeiras-Barra Funda','Luz','Brás','Juventus-Mooca','Ipiranga','Tamanduateí','São Caetano do Sul','Utinga','Prefeito Saladino','Santo André','Capuava','Mauá','Guapituba','Ribeirão Pires','Rio Grande da Serra']]},
+{id:'11',nm:'Coral',op:'CPTM',c:'#F04E23',cd:'#FF6A40',v:46,hw:[12,15,15],O:240,off:1,hours:'4h–0h',svc:[['Palmeiras-Barra Funda','Luz','Brás','Tatuapé','Corinthians-Itaquera','Dom Bosco','José Bonifácio','Guaianases','Antonio Gianetti Neto','Ferraz de Vasconcelos','Poá','Calmon Viana','Suzano','Jundiapeba','Braz Cubas','Mogi das Cruzes','Estudantes']]},
+{id:'12',nm:'Safira',op:'CPTM',c:'#083E89',cd:'#4C7FD8',v:46,hw:[15,20,20],O:240,off:-1,hours:'4h–0h',svc:[['Brás','Tatuapé','Engenheiro Goulart','USP Leste','Comendador Ermelino','São Miguel Paulista','Jardim Helena-Vila Mara','Itaim Paulista','Jardim Romano','Engenheiro Manoel Feio','Itaquaquecetuba','Aracaré','Calmon Viana']]},
+{id:'13',nm:'Jade',op:'CPTM',c:'#00A84C',cd:'#23C46A',v:48,hw:[20,30,30],O:240,off:0,hours:'4h–0h',svc:[['Engenheiro Goulart','Guarulhos-Cecap','Aeroporto-Guarulhos']]},
+{id:'15',nm:'Prata',op:'Metrô',c:'#8D949B',cd:'#B7BDC4',v:34,hw:[8,9,10],O:280,off:0,m24:true,hours:'4h40–0h',svc:[['Vila Prudente','Oratório','São Lucas','Camilo Haddad','Vila Tolstói','Vila União','Jardim Planalto','Sapopemba','Fazenda da Juta','São Mateus','Jardim Colonial']]},
+{id:'17',nm:'Ouro',op:'Metrô',c:'#B8932A',cd:'#D9B44A',v:28,hw:[10,12,12],O:360,off:0,l17:true,hours:'6h–22h, seg–sáb (sem cobrança)',svc:[['Morumbi','Chucri Zaidan','Vila Cordeiro','Campo Belo','Vereador José Diniz','Brooklin Paulista','Aeroporto de Congonhas'],['Brooklin Paulista','Washington Luís']]}
+];
+const TR={'Paraíso':2,'Ana Rosa':2,'Presidente Altino':2,'Sé':3,'Calmon Viana':3,'Engenheiro Goulart':3,'Luz':5,'República':5,'Pinheiros':5,'Santo Amaro':7,'Campo Belo':6,'Lapa':9,'Água Branca':7};
+const ALIAS=[['Consolação','Paulista',6]];
+const MID=1440;
+
+function hav(a,b){const R=6371,r=Math.PI/180,dl=(b[0]-a[0])*r,dn=(b[1]-a[1])*r;const x=Math.sin(dl/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+const walkMin=d=>d*1.3/4.8*60;
+function hwAt(L,day,t){
+  if(t>MID)return 25;const b=L.hw[day];
+  const peak=day===0&&((t>=360&&t<540)||(t>=990&&t<1170));
+  if(peak)return Math.max(2.5,Math.round(b*0.4*2)/2);
+  if(t>=360&&t<1260)return Math.max(3.5,Math.round(b*0.7*2)/2);
+  return b;
+}
+function buildModel(day,mode24){
+  const services=[],at={};
+  for(const L of LINES){
+    let closed=false,C=MID,O=L.O,open24=false,why='';
+    if(L.l6){ if(day!==0){closed=true;why='Aberta só em dias úteis, 10h–15h';} else C=900; }
+    if(L.l17){ if(day===2){closed=true;why='Fechada aos domingos';} else C=1320; }
+    if(mode24&&day===1&&L.m24){open24=true;C=28*60+40;}
+    L.svc.forEach((st,si)=>{
+      const cum=[0];
+      for(let k=1;k<st.length;k++){const d=hav(ST[st[k-1]],ST[st[k]]);cum.push(cum[k-1]+Math.max(1.4,d*1.12/L.v*60));}
+      const deps=[];let t=C;while(t>=O){deps.push(t);t-=hwAt(L,day,t);}deps.reverse();
+      const s={line:L,si,st,cum,total:cum[cum.length-1],C,O,deps,closed,open24,why};
+      services.push(s);
+      st.forEach((k,i)=>{(at[k]=at[k]||[]).push({s,i});});
+    });
+  }
+  return {services,at,day,mode24};
+}
+function off(s,dir,i){return dir>0?s.cum[i]:s.total-s.cum[i];}
+function lastPass(s,dir,i){return s.C+off(s,dir,i);}
+function lb(a,t){let lo=0,hi=a.length;while(lo<hi){const m=(lo+hi)>>1;if(a[m]<t)lo=m+1;else hi=m;}return lo;}
+function nextDep(s,t){const i=lb(s.deps,t);return i<s.deps.length?s.deps[i]:null;}
+function dirName(s,dir){return dir>0?s.st[s.st.length-1]:s.st[0];}
+
+/* Dijkstra dependente do tempo, com várias origens (cada uma com seu horário de chegada a pé) */
+function earliestMulti(M,sources,ignoreGate){
+  const arr={},via={},prev={},done=new Set(),src=new Set();
+  for(const {k,t} of sources){if(arr[k]===undefined||t<arr[k]){arr[k]=t;via[k]=null;src.add(k);}}
+  for(;;){
+    let u=null,best=Infinity;for(const k in arr){if(!done.has(k)&&arr[k]<best){best=arr[k];u=k;}}
+    if(u===null)break;done.add(u);const t=arr[u],v=via[u];
+    for(const {s,i} of (M.at[u]||[])){
+      if(s.closed)continue;if(v&&v!=='walk'&&v===s)continue;
+      const pen=(v===null||v==='walk')?0:(TR[u]??4);
+      const tb=t+pen;
+      if(v===null&&!ignoreGate&&!s.open24&&tb>s.C)continue;
+      for(const dir of [1,-1]){
+        if(i===(dir>0?s.st.length-1:0))continue;
+        const o=off(s,dir,i);const d=nextDep(s,tb-o);if(d===null)continue;
+        const board=d+o;
+        for(let j=i+dir;dir>0?j<s.st.length:j>=0;j+=dir){
+          const a=d+off(s,dir,j),k=s.st[j];
+          if(arr[k]===undefined||a<arr[k]-1e-9){arr[k]=a;via[k]=s;prev[k]={from:u,to:k,s,dir,board,alight:a,stops:Math.abs(j-i)};}
+        }
+      }
+    }
+    for(const [a,b,w] of ALIAS){const o=u===a?b:u===b?a:null;if(!o)continue;const ta=t+w;if(arr[o]===undefined||ta<arr[o]){arr[o]=ta;via[o]='walk';prev[o]={walk:true,from:u,to:o,t0:t,t1:ta};}}
+  }
+  return {arr,prev,src};
+}
+const earliest=(M,o,t0,ig)=>earliestMulti(M,[{k:o,t:t0}],ig);
+function legsOf(r,dest){const legs=[];let k=dest,g=0;while(r.prev[k]&&g++<60){const p=r.prev[k];legs.unshift(p);k=p.from;}return legs;}
+
+/* Lugares: estação ou ponto */
+const ptOf=p=>p.kind==='station'?ST[p.key]:[p.lat,p.lon];
+function candidates(M,p){
+  if(p.kind==='station')return [{k:p.key,w:0,d:0}];
+  const list=Object.keys(ST).filter(k=>M.at[k]).map(k=>{const d=hav([p.lat,p.lon],ST[k]);return {k,d,w:walkMin(d)};}).sort((a,b)=>a.d-b.d);
+  let c=list.filter(x=>x.d<=2.2).slice(0,6);if(c.length<2)c=list.slice(0,3);return c;
+}
+function plan(M,from,to,t0){
+  const src=candidates(M,from),dst=candidates(M,to);
+  const sameStation=from.kind==='station'&&to.kind==='station'&&from.key===to.key;
+  if(sameStation)return {same:true};
+  const r=earliestMulti(M,src.map(c=>({k:c.k,t:t0+c.w})),false);
+  let best=null;for(const c of dst){const a=r.arr[c.k];if(a===undefined)continue;if(r.src.has(c.k)&&!r.prev[c.k]&&from.kind!=='station'){/* origem e destino na mesma estação: andar direto */}const tot=a+c.w;if(!best||tot<best.tot)best={tot,c};}
+  const d=hav(ptOf(from),ptOf(to)),dw=walkMin(d);
+  if(d<0.8||(best&&dw<=best.tot-t0+2)||(!best&&d<3))return {walk:true,d,dw,t0,arrive:t0+dw};
+  if(!best)return null;
+  const legs=legsOf(r,best.c.k);
+  const startK=legs.length?legs[0].from:best.c.k;
+  const access=src.find(x=>x.k===startK)||{k:startK,w:0,d:0};
+  return {t0,arrive:best.tot,legs,access,egress:best.c,from,to};
+}
+function latestTrip(M,from,to){
+  const src=candidates(M,from),dst=candidates(M,to);
+  const any24=src.some(c=>(M.at[c.k]||[]).some(x=>x.s.open24));
+  const ok=t=>{const r=earliestMulti(M,src.map(c=>({k:c.k,t:t+c.w})),false);return dst.some(c=>r.arr[c.k]!==undefined);};
+  const hi=any24?1530:MID;
+  if(ok(hi))return {t:hi,all:any24};
+  let t=hi;while(t>18*60){t-=10;if(ok(t))break;}
+  if(t<=18*60)return null;
+  for(let x=Math.min(hi,t+9);x>=t;x--)if(ok(x))return {t:x};
+  return null;
+}
+</script>
+
+<script id="places">
+/* Bairros, cidades e pontos de referência (coordenadas aproximadas) */
+const PLACES=[
+['São Paulo (Centro)',-23.5505,-46.6333,'Cidade'],['Guarulhos',-23.4628,-46.5333,'Cidade'],['Osasco',-23.5329,-46.7920,'Cidade'],['Santo André',-23.6639,-46.5383,'Cidade'],['São Bernardo do Campo',-23.6914,-46.5646,'Cidade'],['São Caetano do Sul',-23.6229,-46.5548,'Cidade'],['Diadema',-23.6861,-46.6228,'Cidade'],['Mauá',-23.6677,-46.4613,'Cidade'],['Mogi das Cruzes',-23.5229,-46.1883,'Cidade'],['Suzano',-23.5425,-46.3108,'Cidade'],['Itaquaquecetuba',-23.4864,-46.3486,'Cidade'],['Ferraz de Vasconcelos',-23.5411,-46.3689,'Cidade'],['Poá',-23.5286,-46.3447,'Cidade'],['Carapicuíba',-23.5235,-46.8407,'Cidade'],['Barueri',-23.5057,-46.8790,'Cidade'],['Alphaville',-23.4980,-46.8480,'Bairro · Barueri'],['Itapevi',-23.5488,-46.9327,'Cidade'],['Jandira',-23.5275,-46.9023,'Cidade'],['Cotia',-23.6022,-46.9192,'Cidade'],['Taboão da Serra',-23.6019,-46.7526,'Cidade'],['Embu das Artes',-23.6489,-46.8522,'Cidade'],['Itapecerica da Serra',-23.7161,-46.8492,'Cidade'],['Franco da Rocha',-23.3217,-46.7264,'Cidade'],['Francisco Morato',-23.2817,-46.7453,'Cidade'],['Caieiras',-23.3647,-46.7406,'Cidade'],['Cajamar',-23.3550,-46.8769,'Cidade'],['Jundiaí',-23.1857,-46.8978,'Cidade'],['Várzea Paulista',-23.2136,-46.8283,'Cidade'],['Campo Limpo Paulista',-23.2078,-46.7889,'Cidade'],['Ribeirão Pires',-23.7108,-46.4131,'Cidade'],['Rio Grande da Serra',-23.7442,-46.3978,'Cidade'],['Arujá',-23.3965,-46.3203,'Cidade'],['Santana de Parnaíba',-23.4439,-46.9178,'Cidade'],['Mairiporã',-23.3189,-46.5869,'Cidade'],['Embu-Guaçu',-23.8320,-46.8110,'Cidade'],
+['Bela Vista',-23.5590,-46.6470,'Bairro'],['Liberdade',-23.5580,-46.6350,'Bairro'],['Consolação (bairro)',-23.5530,-46.6560,'Bairro'],['Jardins',-23.5660,-46.6630,'Bairro'],['Jardim Paulista',-23.5720,-46.6600,'Bairro'],['Jardim Europa',-23.5800,-46.6800,'Bairro'],['Itaim Bibi',-23.5845,-46.6780,'Bairro'],['Vila Olímpia (bairro)',-23.5955,-46.6855,'Bairro'],['Vila Nova Conceição',-23.5920,-46.6690,'Bairro'],['Moema (bairro)',-23.6000,-46.6650,'Bairro'],['Brooklin (bairro)',-23.6150,-46.6950,'Bairro'],['Campo Belo (bairro)',-23.6230,-46.6750,'Bairro'],['Santo Amaro (bairro)',-23.6520,-46.7080,'Bairro'],['Chácara Santo Antônio',-23.6340,-46.7130,'Bairro'],['Morumbi (bairro)',-23.6000,-46.7200,'Bairro'],['Paraisópolis',-23.6170,-46.7200,'Bairro'],['Vila Andrade',-23.6300,-46.7350,'Bairro'],['Pinheiros (bairro)',-23.5650,-46.6900,'Bairro'],['Vila Madalena (bairro)',-23.5560,-46.6900,'Bairro'],['Alto de Pinheiros',-23.5520,-46.7100,'Bairro'],['Perdizes (bairro)',-23.5370,-46.6780,'Bairro'],['Pompeia',-23.5290,-46.6870,'Bairro'],['Vila Leopoldina',-23.5280,-46.7300,'Bairro'],['Barra Funda',-23.5250,-46.6600,'Bairro'],['Higienópolis',-23.5450,-46.6550,'Bairro'],['Santa Cecília (bairro)',-23.5380,-46.6490,'Bairro'],['Bom Retiro',-23.5260,-46.6400,'Bairro'],['Centro Histórico',-23.5480,-46.6350,'Bairro'],['Cambuci',-23.5680,-46.6230,'Bairro'],['Aclimação',-23.5730,-46.6310,'Bairro'],['Mooca',-23.5600,-46.5990,'Bairro'],['Água Rasa',-23.5550,-46.5730,'Bairro'],['Vila Formosa',-23.5600,-46.5450,'Bairro'],['Aricanduva',-23.5650,-46.5150,'Bairro'],['Penha (bairro)',-23.5250,-46.5450,'Bairro'],['Cangaíba',-23.5080,-46.5280,'Bairro'],['Ermelino Matarazzo',-23.5000,-46.4800,'Bairro'],['Itaquera',-23.5400,-46.4600,'Bairro'],['Cidade Tiradentes',-23.5820,-46.4050,'Bairro'],['São Mateus (bairro)',-23.6100,-46.4750,'Bairro'],['Sapopemba (bairro)',-23.6000,-46.5050,'Bairro'],['Vila Prudente (bairro)',-23.5850,-46.5800,'Bairro'],['Ipiranga (bairro)',-23.5890,-46.6100,'Bairro'],['Vila Mariana (bairro)',-23.5890,-46.6350,'Bairro'],['Saúde (bairro)',-23.6180,-46.6350,'Bairro'],['Cursino',-23.6230,-46.6150,'Bairro'],['Jabaquara (bairro)',-23.6420,-46.6450,'Bairro'],['Cidade Ademar',-23.6750,-46.6550,'Bairro'],['Pedreira',-23.6950,-46.6600,'Bairro'],['Interlagos',-23.6950,-46.6900,'Bairro'],['Grajaú (bairro)',-23.7500,-46.6800,'Bairro'],['Parelheiros',-23.8270,-46.7300,'Bairro'],['Jardim Ângela',-23.7100,-46.7750,'Bairro'],['Jardim São Luís',-23.6700,-46.7400,'Bairro'],['Capão Redondo (bairro)',-23.6700,-46.7800,'Bairro'],['Campo Limpo (bairro)',-23.6400,-46.7600,'Bairro'],['Butantã (bairro)',-23.5700,-46.7150,'Bairro'],['Rio Pequeno',-23.5700,-46.7550,'Bairro'],['Jaguaré',-23.5450,-46.7500,'Bairro'],['Raposo Tavares',-23.5900,-46.7800,'Bairro'],['Vila Sônia (bairro)',-23.5950,-46.7400,'Bairro'],['Freguesia do Ó (bairro)',-23.4980,-46.6950,'Bairro'],['Brasilândia',-23.4700,-46.6850,'Bairro'],['Casa Verde',-23.5090,-46.6600,'Bairro'],['Limão',-23.5050,-46.6700,'Bairro'],['Santana (bairro)',-23.5000,-46.6290,'Bairro'],['Tucuruvi (bairro)',-23.4800,-46.6060,'Bairro'],['Vila Maria',-23.5120,-46.5850,'Bairro'],['Vila Guilherme',-23.5110,-46.6050,'Bairro'],['Tremembé',-23.4600,-46.6100,'Bairro'],['Jaçanã',-23.4620,-46.5800,'Bairro'],['Mandaqui',-23.4800,-46.6300,'Bairro'],['Pirituba (bairro)',-23.4900,-46.7200,'Bairro'],['Perus (bairro)',-23.4050,-46.7500,'Bairro'],['Jaraguá (bairro)',-23.4550,-46.7400,'Bairro'],['São Miguel Paulista (bairro)',-23.4950,-46.4450,'Bairro'],['Itaim Paulista (bairro)',-23.4980,-46.3950,'Bairro'],['Guaianases (bairro)',-23.5450,-46.4150,'Bairro'],['Lajeado',-23.5300,-46.4050,'Bairro'],
+['Avenida Paulista',-23.5614,-46.6559,'Local'],['MASP',-23.5614,-46.6559,'Local'],['Parque Ibirapuera',-23.5874,-46.6576,'Local'],['Parque Villa-Lobos',-23.5466,-46.7230,'Local'],['Allianz Parque',-23.5275,-46.6784,'Local'],['Neo Química Arena',-23.5453,-46.4742,'Local'],['Estádio do Morumbi (MorumBIS)',-23.6003,-46.7202,'Local'],['Estádio do Pacaembu',-23.5477,-46.6650,'Local'],['Autódromo de Interlagos',-23.7036,-46.6997,'Local'],['Aeroporto de Congonhas (terminal)',-23.6266,-46.6554,'Local'],['Aeroporto de Guarulhos (terminais)',-23.4356,-46.4731,'Local'],['Rodoviária do Tietê',-23.5163,-46.6249,'Local'],['Rodoviária da Barra Funda',-23.5256,-46.6670,'Local'],['Rodoviária do Jabaquara',-23.6460,-46.6410,'Local'],['USP (Cidade Universitária)',-23.5590,-46.7310,'Local'],['Mercado Municipal',-23.5418,-46.6294,'Local'],['Rua 25 de Março',-23.5440,-46.6330,'Local'],['Pinacoteca',-23.5342,-46.6338,'Local'],['Theatro Municipal',-23.5452,-46.6388,'Local'],['Catedral da Sé',-23.5508,-46.6340,'Local'],['Rua Augusta',-23.5560,-46.6580,'Local'],['Rua Oscar Freire',-23.5625,-46.6700,'Local'],['Avenida Faria Lima',-23.5800,-46.6850,'Local'],['Avenida Berrini',-23.6050,-46.6950,'Local'],['Shopping Ibirapuera',-23.6107,-46.6667,'Local'],['Shopping Eldorado',-23.5728,-46.6965,'Local'],['Shopping Morumbi',-23.6230,-46.6990,'Local'],['Shopping Iguatemi',-23.5770,-46.6880,'Local'],['Shopping Aricanduva',-23.5660,-46.5060,'Local'],['Shopping Center Norte',-23.5150,-46.6170,'Local'],['Shopping Tatuapé',-23.5420,-46.5760,'Local'],['Shopping Interlagos',-23.6810,-46.6800,'Local'],['Shopping Itaquera',-23.5430,-46.4700,'Local'],['Expo Center Norte',-23.5130,-46.6150,'Local'],['Distrito Anhembi',-23.5160,-46.6390,'Local'],['São Paulo Expo',-23.6480,-46.6250,'Local'],['Hospital das Clínicas',-23.5570,-46.6690,'Local'],['Hospital Albert Einstein',-23.5995,-46.7155,'Local'],['Hospital Sírio-Libanês',-23.5570,-46.6540,'Local'],['Memorial da América Latina',-23.5260,-46.6650,'Local'],['Parque da Juventude',-23.5080,-46.6250,'Local'],['Sambódromo do Anhembi',-23.5170,-46.6370,'Local'],['Zoológico de São Paulo',-23.6510,-46.6200,'Local'],['Parque do Carmo',-23.5800,-46.4700,'Local'],['Ceagesp',-23.5380,-46.7470,'Local'],['Praça da República',-23.5430,-46.6430,'Local'],['Vale do Anhangabaú',-23.5460,-46.6380,'Local'],['Copan',-23.5463,-46.6445,'Local'],['Mackenzie',-23.5470,-46.6520,'Local'],['PUC-SP (Perdizes)',-23.5370,-46.6720,'Local'],['Unifesp (Vila Clementino)',-23.5980,-46.6430,'Local']
+];
+</script>
+
+<script>
+/* ===== Interface ===== */
+const $=id=>document.getElementById(id);
+const S={day:0,mode24:false,T:780,sel:'Sé',tab:'viagem',playing:false,when:'now',
+  from:{kind:'point',lat:-23.5614,lon:-46.6559,label:'Avenida Paulista'},to:{kind:'point',lat:-23.5453,lon:-46.4742,label:'Neo Química Arena'},
+  example:true,pick:null,gps:null,gpsId:null,reach:null,trip:null,field:'to'};
+let M=buildModel(S.day,S.mode24);
+const KEYS=Object.keys(ST).sort((a,b)=>a.localeCompare(b,'pt'));
+const linesAt=k=>[...new Map((M.at[k]||[]).map(x=>[x.s.line.id,x.s.line])).values()];
+const HUB=new Set(KEYS.filter(k=>new Set((M.at[k]||[]).map(x=>x.s.line.id)).size>1||ALIAS.some(a=>a[0]===k||a[1]===k)));
+const TERM=new Set();LINES.forEach(L=>L.svc.forEach(s=>{TERM.add(s[0]);TERM.add(s[s.length-1]);}));
+
+const fmt=m=>{m=Math.round(m);const h=Math.floor(m/60)%24,mm=((m%60)+60)%60;return h+':'+String(mm).padStart(2,'0');};
+const dur=m=>{m=Math.round(m);if(m<60)return m+' min';return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0');};
+const dist=d=>d<1?Math.round(d*100)*10+' m':d.toFixed(1).replace('.',',')+' km';
+const norm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function isDark(){const t=document.documentElement.dataset.theme;if(t)return t==='dark';return !matchMedia('(prefers-color-scheme: light)').matches;}
+const lc=L=>isDark()?L.cd:L.c;
+const badge=(L,sm)=>`<span class="badge${sm?' sm':''}" style="--lc:${lc(L)}" title="Linha ${L.id}-${L.nm}">${L.id}</span>`;
+const placeLabel=p=>p.kind==='station'?p.key:p.label;
+function nearestKey(lat,lon){let b=null,bd=1e9;for(const k of KEYS){if(!M.at[k])continue;const d=hav([lat,lon],ST[k]);if(d<bd){bd=d;b=k;}}return {k:b,d:bd};}
+
+$('count').innerHTML=`<b>${LINES.length}</b> linhas<br><b>${KEYS.length}</b> estações`;
+
+/* ticks da régua */
+const TMIN=240,TMAX=1530;
+(function(){const el=$('ticks');[[240,'4h'],[480,'8h'],[720,'12h'],[960,'16h'],[1200,'20h'],[1440,'0h']].forEach(([t,l])=>{const s=document.createElement('span');s.textContent=l;s.style.left=((t-TMIN)/(TMAX-TMIN)*100)+'%';if(t===1440)s.className='mid';el.appendChild(s);});
+  $('tr').style.setProperty('--mid',((1440-TMIN)/(TMAX-TMIN)*100)+'%');$('tr').style.setProperty('--night',((280-TMIN)/(TMAX-TMIN)*100)+'%');})();
+
+/* ===== Mapa ===== */
+const cv=$('map'),ctx=cv.getContext('2d');let dpr=1,W=0,H=0;
+const LAT0=-23.55,LON0=-46.63,KX=Math.cos(LAT0*Math.PI/180)*111.32,KY=110.57;
+const proj=(lat,lon)=>[(lon-LON0)*KX,-(lat-LAT0)*KY];
+const PK={};for(const k of KEYS)PK[k]=proj(ST[k][0],ST[k][1]);
+const V={s:10,cx:0,cy:0};
+const sx=x=>(x-V.cx)*V.s+W/2,sy=y=>(y-V.cy)*V.s+H/2;
+const unproj=(px,py)=>{const x=(px-W/2)/V.s+V.cx,y=(py-H/2)/V.s+V.cy;return [LAT0-y/KY,x/KX+LON0];};
+function fit(b){const [la1,la2,lo1,lo2]=b;const x1=(lo1-LON0)*KX,x2=(lo2-LON0)*KX,y1=-(la2-LAT0)*KY,y2=-(la1-LAT0)*KY;V.cx=(x1+x2)/2;V.cy=(y1+y2)/2;V.s=Math.min(W/(x2-x1),H/(y2-y1))*0.94;}
+function fitPts(pts){if(!pts.length)return;let a=90,b=-90,c=180,d=-180;for(const [la,lo] of pts){a=Math.min(a,la);b=Math.max(b,la);c=Math.min(c,lo);d=Math.max(d,lo);}const pad=0.012;fit([a-pad,b+pad,c-pad,d+pad]);V.s=Math.min(V.s,60);}
+const CORE=[-23.70,-23.44,-46.79,-46.42],ALL=[-23.80,-23.17,-46.98,-46.15];
+const RIVERS=[[[-23.523,-46.80],[-23.528,-46.765],[-23.535,-46.745],[-23.527,-46.715],[-23.515,-46.69],[-23.514,-46.66],[-23.517,-46.635],[-23.512,-46.61],[-23.503,-46.585],[-23.497,-46.555],[-23.493,-46.53],[-23.488,-46.50],[-23.480,-46.46],[-23.475,-46.42],[-23.47,-46.37]],[[-23.535,-46.745],[-23.548,-46.725],[-23.562,-46.712],[-23.578,-46.699],[-23.598,-46.692],[-23.617,-46.699],[-23.637,-46.706],[-23.657,-46.713],[-23.678,-46.706],[-23.700,-46.700]]];
+let TOK={};
+function readTok(){const cs=getComputedStyle(document.documentElement);['map','river','fg','muted','dead','accent','st','surface','end','you'].forEach(k=>TOK[k]=cs.getPropertyValue('--'+k).trim());}
+function resize(){const r=cv.getBoundingClientRect();dpr=Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);}
+let fitted=false;
+new ResizeObserver(()=>{resize();if(!fitted&&W>0){fit(CORE);fitted=true;if(S.tab==='viagem'&&S.from&&S.to){renderTrip(true);}}req();}).observe(cv);
+let raf=0;function req(){if(!raf)raf=requestAnimationFrame(()=>{raf=0;draw();});}
+let trainCount=0;
+function posOn(s,dir,p){const c=s.cum,n=c.length;let q=dir>0?p:s.total-p;q=Math.max(0,Math.min(s.total,q));let k=0;while(k<n-2&&c[k+1]<q)k++;const f=(q-c[k])/((c[k+1]-c[k])||1);const a=PK[s.st[k]],b=PK[s.st[k+1]];return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,k];}
+
+function draw(){
+  if(!W)return;readTok();const T=S.T,dark=isDark();
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=TOK.map;ctx.fillRect(0,0,W,H);
+  const w=Math.max(2.2,Math.min(6,V.s*0.2));
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=TOK.river;ctx.lineWidth=Math.max(3,V.s*0.18);
+  for(const r of RIVERS){ctx.beginPath();r.forEach((p,i)=>{const [x,y]=proj(p[0],p[1]);i?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y));});ctx.stroke();}
+  const ff=getComputedStyle(document.body).fontFamily;
+  if(V.s>14){ctx.fillStyle=TOK.muted;ctx.globalAlpha=.7;ctx.font=`italic 500 11px ${ff}`;let [x,y]=proj(-23.508,-46.655);ctx.fillText('Rio Tietê',sx(x),sy(y));[x,y]=proj(-23.62,-46.7015);ctx.save();ctx.translate(sx(x),sy(y));ctx.rotate(Math.PI/2.3);ctx.fillText('Rio Pinheiros',0,0);ctx.restore();ctx.globalAlpha=1;}
+  const reach=S.tab==='estacao'&&S.sel?S.reach:null;
+  const R=k=>!reach||reach.arr[k]!==undefined;
+  for(const s of M.services){
+    const col=lc(s.line),o=s.line.off*w*0.95;
+    for(let k=0;k<s.st.length-1;k++){
+      const a=PK[s.st[k]],b=PK[s.st[k+1]];let ax=sx(a[0]),ay=sy(a[1]),bx=sx(b[0]),by=sy(b[1]);
+      if(o){const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1,nx=-dy/L*o,ny=dx/L*o;ax+=nx;ay+=ny;bx+=nx;by+=ny;}
+      let alpha=1,color=col,lw=w,dash=null;
+      if(s.closed||T<s.O){alpha=.3;lw=w*.6;dash=[w*1.2,w*1.6];}
+      else if(T>s.C){const alive=T<Math.max(lastPass(s,1,k+1),lastPass(s,-1,k));if(alive)alpha=.75;else{color=TOK.dead;lw=w*.55;}}
+      if(reach&&!R(s.st[k])&&!R(s.st[k+1]))alpha*=.18;
+      if(S.tab==='viagem'&&S.trip&&S.trip.legs)alpha*=.55;
+      ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.setLineDash(dash||[]);
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+  /* viagem destacada */
+  const trip=S.tab==='viagem'?S.trip:null;
+  if(trip){
+    const P=p=>{const [x,y]=proj(p[0],p[1]);return [sx(x),sy(y)];};
+    const walkLine=(a,b)=>{ctx.setLineDash([2,6]);ctx.strokeStyle=TOK.you;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...P(a));ctx.lineTo(...P(b));ctx.stroke();ctx.setLineDash([]);};
+    if(trip.walk){walkLine(ptOf(S.from),ptOf(S.to));}
+    else if(trip.legs){
+      if(S.from.kind!=='station')walkLine(ptOf(S.from),ST[trip.access.k]);
+      if(S.to.kind!=='station')walkLine(ST[trip.egress.k],ptOf(S.to));
+      for(const g of trip.legs){
+        if(g.walk){walkLine(ST[g.from],ST[g.to]);continue;}
+        const s=g.s,i=s.st.indexOf(g.from),j=s.st.indexOf(g.to);
+        ctx.strokeStyle=TOK.accent;ctx.globalAlpha=.4;ctx.lineWidth=w*3;ctx.beginPath();
+        for(let q=i;g.dir>0?q<=j:q>=j;q+=g.dir){const p=PK[s.st[q]];q===i?ctx.moveTo(sx(p[0]),sy(p[1])):ctx.lineTo(sx(p[0]),sy(p[1]));}ctx.stroke();
+        ctx.globalAlpha=1;ctx.strokeStyle=lc(s.line);ctx.lineWidth=w*1.3;ctx.stroke();
+      }
+    }
+  }
+  /* trens */
+  trainCount=0;
+  for(const s of M.services){
+    if(s.closed)continue;const col=lc(s.line),o=s.line.off*w*0.95;
+    for(const dir of [1,-1]){
+      for(let q=lb(s.deps,T-s.total);q<s.deps.length&&s.deps[q]<=T;q++){
+        const d=s.deps[q];const [x,y,k]=posOn(s,dir,T-d);let X=sx(x),Y=sy(y);trainCount++;
+        if(o){const a=PK[s.st[k]],b=PK[s.st[k+1]];const dx=sx(b[0])-sx(a[0]),dy=sy(b[1])-sy(a[1]),L=Math.hypot(dx,dy)||1;X+=-dy/L*o;Y+=dx/L*o;}
+        if(X<-20||Y<-20||X>W+20||Y>H+20)continue;
+        const last=d===s.C,r=w*.85+1.2;
+        if(reach&&!R(s.st[k])&&!R(s.st[k+1]))ctx.globalAlpha=.25;
+        if(dark){ctx.shadowColor=col;ctx.shadowBlur=last?16:9;}
+        ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,last?r*1.25:r,0,7);ctx.fill();ctx.shadowBlur=0;
+        ctx.fillStyle=dark?'#ffffff':TOK.st;ctx.beginPath();ctx.arc(X,Y,r*.42,0,7);ctx.fill();
+        if(last){ctx.strokeStyle=TOK.accent;ctx.lineWidth=2;ctx.beginPath();ctx.arc(X,Y,r*1.25+3.5,0,7);ctx.stroke();}
+        ctx.globalAlpha=1;
+      }
+    }
+  }
+  /* estações */
+  const showAll=V.s>=26;
+  for(const k of KEYS){
+    if(!M.at[k])continue;const [x,y]=PK[k],X=sx(x),Y=sy(y);if(X<-10||Y<-10||X>W+10||Y>H+10)continue;
+    const hub=HUB.has(k);if(!hub&&V.s<7)continue;
+    ctx.globalAlpha=R(k)?1:.25;
+    if(hub){ctx.fillStyle=TOK.st;ctx.strokeStyle=TOK.fg;ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(X,Y,w*1.05+1,0,7);ctx.fill();ctx.stroke();}
+    else{ctx.fillStyle=TOK.st;ctx.strokeStyle=lc(M.at[k][0].s.line);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X,Y,w*.55+.6,0,7);ctx.fill();ctx.stroke();}
+    ctx.globalAlpha=1;
+  }
+  const ring=k=>{if(!k||!PK[k])return;const X=sx(PK[k][0]),Y=sy(PK[k][1]);ctx.strokeStyle=TOK.accent;ctx.lineWidth=3;ctx.beginPath();ctx.arc(X,Y,w*1.05+7,0,7);ctx.stroke();ctx.fillStyle=TOK.accent;ctx.beginPath();ctx.arc(X,Y,w*.9,0,7);ctx.fill();};
+  const emph=new Set();
+  if(S.tab==='viagem'){
+    const pin=(p,isFrom)=>{const [x,y]=proj(...ptOf(p));const X=sx(x),Y=sy(y);
+      if(isFrom){if(S.gps&&p.kind==='gps'&&p.acc){ctx.fillStyle=TOK.you;ctx.globalAlpha=.15;ctx.beginPath();ctx.arc(X,Y,Math.max(8,p.acc/1000*V.s),0,7);ctx.fill();ctx.globalAlpha=1;}
+        ctx.fillStyle=TOK.you;ctx.strokeStyle=TOK.st;ctx.lineWidth=3;ctx.beginPath();ctx.arc(X,Y,7,0,7);ctx.fill();ctx.stroke();}
+      else{ctx.fillStyle=TOK.accent;ctx.strokeStyle=TOK.st;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(X,Y);ctx.arc(X,Y-16,8,Math.PI*.8,Math.PI*.2,false);ctx.closePath();ctx.fill();ctx.stroke();ctx.fillStyle=TOK.st;ctx.beginPath();ctx.arc(X,Y-16,3,0,7);ctx.fill();}};
+    if(trip&&trip.legs){emph.add(trip.access.k);emph.add(trip.egress.k);trip.legs.forEach(g=>{emph.add(g.from);emph.add(g.to);});}
+    if(S.from)pin(S.from,true);if(S.to)pin(S.to,false);
+  } else if(S.sel){ring(S.sel);emph.add(S.sel);}
+  /* rótulos */
+  const rects=[];
+  const order=[...emph].filter(Boolean).concat(KEYS.filter(k=>HUB.has(k)),KEYS.filter(k=>TERM.has(k)&&!HUB.has(k)),showAll?KEYS:[]);
+  const seen=new Set();
+  for(const k of order){
+    if(seen.has(k)||!M.at[k])continue;seen.add(k);
+    const e=emph.has(k);
+    if(!e&&V.s<5.5)continue;if(!e&&!HUB.has(k)&&V.s<11)continue;
+    const X=sx(PK[k][0]),Y=sy(PK[k][1]);if(X<-50||Y<-20||X>W+50||Y>H+20)continue;
+    const big=e||HUB.has(k);ctx.font=`${big?700:500} ${e?12.5:big?11:10}px ${ff}`;
+    const tw=ctx.measureText(k).width,lx=X+w+6,ly=Y+4,rc=[lx-3,ly-12,tw+6,16];
+    if(!e&&rects.some(r=>!(rc[0]>r[0]+r[2]||rc[0]+rc[2]<r[0]||rc[1]>r[1]+r[3]||rc[1]+rc[3]<r[1])))continue;
+    rects.push(rc);ctx.globalAlpha=R(k)?1:.35;
+    ctx.lineWidth=3.5;ctx.strokeStyle=TOK.map;ctx.strokeText(k,lx,ly);ctx.fillStyle=e?TOK.accent:big?TOK.fg:TOK.muted;ctx.fillText(k,lx,ly);ctx.globalAlpha=1;
+  }
+  updateSummary();
+}
+
+/* pan / zoom / toque */
+const PT=new Map();let moved=0,pinch=null;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);PT.set(e.pointerId,[e.clientX,e.clientY]);moved=0;if(PT.size===2){const [a,b]=[...PT.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),s:V.s};}cv.classList.add('drag');});
+cv.addEventListener('pointermove',e=>{if(!PT.has(e.pointerId))return;const p=PT.get(e.pointerId),dx=e.clientX-p[0],dy=e.clientY-p[1];PT.set(e.pointerId,[e.clientX,e.clientY]);
+  if(PT.size===1){V.cx-=dx/V.s;V.cy-=dy/V.s;moved+=Math.abs(dx)+Math.abs(dy);req();}
+  else if(PT.size===2&&pinch){const [a,b]=[...PT.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);const r=cv.getBoundingClientRect();zoomAt(pinch.s*d/pinch.d/V.s,(a[0]+b[0])/2-r.left,(a[1]+b[1])/2-r.top);moved=99;}});
+const up=e=>{if(!PT.has(e.pointerId))return;PT.delete(e.pointerId);if(PT.size<2)pinch=null;cv.classList.remove('drag');
+  if(moved<6&&PT.size===0){const r=cv.getBoundingClientRect();tap(e.clientX-r.left,e.clientY-r.top);}};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',e=>{PT.delete(e.pointerId);pinch=null;});
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(Math.exp(-e.deltaY*0.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+function zoomAt(f,px,py){const ns=Math.max(2.5,Math.min(140,V.s*f));const wx=(px-W/2)/V.s+V.cx,wy=(py-H/2)/V.s+V.cy;V.s=ns;V.cx=wx-(px-W/2)/V.s;V.cy=wy-(py-H/2)/V.s;req();}
+$('zin').onclick=()=>zoomAt(1.5,W/2,H/2);$('zout').onclick=()=>zoomAt(1/1.5,W/2,H/2);$('zfit').onclick=()=>{fit(ALL);req();};
+function stationAt(x,y){let best=null,bd=18;for(const k of KEYS){if(!M.at[k])continue;const d=Math.hypot(sx(PK[k][0])-x,sy(PK[k][1])-y);if(d<bd){bd=d;best=k;}}return best;}
+function tap(x,y){
+  if(S.pick){const [lat,lon]=unproj(x,y);const n=nearestKey(lat,lon);const st=stationAt(x,y);
+    const place=st?{kind:'station',key:st}:{kind:'point',lat,lon,label:'Ponto no mapa (perto de '+n.k+')'};
+    setEnd(S.pick,place);endPick();return;}
+  const best=stationAt(x,y);if(!best)return;
+  if(S.tab==='viagem'){setEnd(S.field,{kind:'station',key:best});S.field=S.field==='from'?'to':'to';}
+  else selectStation(best);
+}
+function startPick(which){S.pick=which;$('pickbar').hidden=false;$('pickTxt').textContent=which==='from'?'Toque no mapa onde você está':'Toque no mapa no seu destino';cv.classList.add('picking');
+  if(innerWidth<=760)document.querySelector('.mapwrap').scrollIntoView({block:'start'});}
+function endPick(){S.pick=null;$('pickbar').hidden=true;cv.classList.remove('picking');}
+$('pickFrom').onclick=()=>{stopGps();startPick('from');};$('pickTo').onclick=()=>startPick('to');$('pickCancel').onclick=endPick;
+
+/* ===== Busca de lugares ===== */
+const IDX=[...KEYS.map(k=>({kind:'station',key:k,n:norm(k)})),...PLACES.map(p=>({kind:'point',label:p[0],lat:p[1],lon:p[2],ty:p[3],n:norm(p[0])}))];
+function search(q){const n=norm(q);if(!n)return [];const out=[];
+  for(const it of IDX){let sc=-1;if(it.n===n)sc=0;else if(it.n.startsWith(n))sc=1;else if((' '+it.n).includes(' '+n))sc=2;else if(it.n.includes(n))sc=3;else continue;out.push([sc,it]);}
+  out.sort((a,b)=>a[0]-b[0]||(a[1].kind==='station'?0:1)-(b[1].kind==='station'?0:1)||a[1].n.length-b[1].n.length);return out.slice(0,8).map(x=>x[1]);}
+let sampleNS=null;
+try{window.claude?.use?.('sample').then(s=>{sampleNS=s;}).catch(()=>{});}catch(e){}
+function bindSearch(inputId,resId,onPick,opts={}){
+  const inp=$(inputId),res=$(resId);let items=[],on=0;
+  const close=()=>{res.hidden=true;inp.setAttribute('aria-expanded','false');};
+  const render=()=>{const q=inp.value;items=opts.stationsOnly?search(q).filter(x=>x.kind==='station'):search(q);on=0;
+    let h=items.map((it,i)=>`<button type="button" data-i="${i}" class="${i===0?'on':''}"><span class="nm">${esc(it.kind==='station'?it.key:it.label)}</span><span class="ty">${it.kind==='station'?linesAt(it.key).map(L=>badge(L,true)).join(''):esc(it.ty)}</span></button>`).join('');
+    if(!opts.stationsOnly&&sampleNS&&norm(q).length>=4)h+=`<button type="button" data-ai="1"><span class="nm">Localizar “${esc(q)}”</span><span class="ty ai">com o Claude</span></button>`;
+    if(!h){close();return;}res.innerHTML=h;res.hidden=false;inp.setAttribute('aria-expanded','true');};
+  inp.addEventListener('input',()=>{if(inp.value.trim())render();else close();});
+  inp.addEventListener('focus',()=>{if(opts.onFocus)opts.onFocus();if(inp.value.trim()&&!opts.keepOnFocus)inp.select();});
+  inp.addEventListener('keydown',e=>{if(res.hidden)return;const bs=res.querySelectorAll('button');
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();on=(on+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length;bs.forEach((b,i)=>b.classList.toggle('on',i===on));}
+    else if(e.key==='Enter'){e.preventDefault();bs[on]?.click();}else if(e.key==='Escape')close();});
+  res.addEventListener('pointerdown',e=>e.preventDefault());
+  res.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;close();
+    if(b.dataset.ai){aiLocate(inp.value,onPick);return;}
+    const it=items[+b.dataset.i];onPick(it.kind==='station'?{kind:'station',key:it.key}:{kind:'point',lat:it.lat,lon:it.lon,label:it.label});});
+  inp.addEventListener('blur',()=>setTimeout(close,120));
+}
+async function aiLocate(q,onPick){
+  const v=$('vbody');v.insertAdjacentHTML('afterbegin','<p class="note" id="aiNote">Localizando com o Claude…</p>');
+  try{
+    const r=await sampleNS.json(`Você geocodifica lugares da Região Metropolitana de São Paulo (inclui Jundiaí). Responda só com JSON no formato {"found":true,"label":"nome curto do lugar, bairro","lat":-23.5,"lon":-46.6}. Se não souber a localização com razoável segurança, ou se ficar fora dessa região, responda {"found":false}. Lugar: "${q.replace(/"/g,"'")}"`,{modelTier:'quick'});
+    $('aiNote')?.remove();
+    if(r&&r.found&&typeof r.lat==='number'&&typeof r.lon==='number'&&r.lat>-24.1&&r.lat<-23.0&&r.lon>-47.2&&r.lon<-45.9){onPick({kind:'point',lat:r.lat,lon:r.lon,label:(r.label||q)+' (aprox.)'});}
+    else v.insertAdjacentHTML('afterbegin','<p class="note warn" id="aiNote">Não consegui localizar esse lugar. Tente o bairro ou marque no mapa.</p>');
+  }catch(e){$('aiNote')?.remove();if(e&&e.code==='not_granted'){sampleNS=null;}
+    v.insertAdjacentHTML('afterbegin',`<p class="note warn" id="aiNote">${e&&e.code==='rate_limited'?'Muitas buscas seguidas. Espere um pouco ou marque no mapa.':'Não foi possível localizar agora. Marque o ponto no mapa.'}</p>`);}
+}
+bindSearch('fq','fres',p=>{stopGps();setEnd('from',p);},{onFocus:()=>S.field='from'});
+bindSearch('tq','tres',p=>setEnd('to',p),{onFocus:()=>S.field='to'});
+bindSearch('stq','sres',p=>selectStation(p.key),{stationsOnly:true});
+
+function setEnd(which,p){S.example=false;S[which]=p;syncInputs();if(S.tab!=='viagem')setTab('viagem');else{renderTrip(true);}}
+function syncInputs(){
+  $('fq').value=S.from?(S.from.kind==='gps'?`Minha localização${S.from.acc?' (±'+Math.round(S.from.acc)+' m)':''}`:placeLabel(S.from)):'';
+  $('tq').value=S.to?placeLabel(S.to):'';
+  $('ff').classList.toggle('you',!!S.gps);
+}
+$('swap').onclick=()=>{stopGps();const a=S.from;S.from=S.to;S.to=a;if(S.from&&S.from.kind==='gps')S.from={kind:'point',lat:S.from.lat,lon:S.from.lon,label:'Minha última localização'};S.example=false;syncInputs();renderTrip(true);};
+
+/* ===== GPS ===== */
+function gpsMsg(t){const el=$('gpsMsg');el.hidden=!t;el.textContent=t||'';}
+function stopGps(){if(S.gpsId!==null){try{navigator.geolocation.clearWatch(S.gpsId);}catch(e){}}S.gpsId=null;S.gps=null;const b=$('gpsBtn');b.classList.remove('live');b.querySelector('span').textContent='Usar meu GPS';$('ff').classList.remove('you');}
+$('gpsBtn').onclick=()=>{
+  if(S.gps||S.gpsId!==null){stopGps();return;}
+  if(!('geolocation' in navigator)){gpsMsg('Este navegador não oferece localização. Busque o bairro ou marque no mapa.');return;}
+  gpsMsg('');$('gpsBtn').querySelector('span').textContent='Procurando…';let first=true;
+  try{
+    S.gpsId=navigator.geolocation.watchPosition(pos=>{
+      const {latitude:lat,longitude:lon,accuracy:acc}=pos.coords;
+      if(lat<-24.2||lat>-22.9||lon<-47.3||lon>-45.8){gpsMsg('Você parece estar fora da Grande São Paulo. Marque um ponto no mapa para planejar.');}
+      const moved=!S.from||S.from.kind!=='gps'||hav([S.from.lat,S.from.lon],[lat,lon])>0.12;
+      S.gps={lat,lon,acc};S.from={kind:'gps',lat,lon,acc,label:'Minha localização'};S.example=false;
+      const b=$('gpsBtn');b.classList.add('live');b.querySelector('span').textContent='GPS ao vivo · parar';
+      syncInputs();if(S.tab!=='viagem')setTab('viagem');
+      if(moved||first)renderTrip(first);else req();first=false;
+    },err=>{
+      stopGps();
+      gpsMsg(err.code===1?'A localização foi bloqueada. Dentro do app do Claude o GPS costuma ficar indisponível; busque seu bairro ou toque em “Marcar no mapa”.':err.code===3?'O GPS demorou demais para responder. Tente de novo ou marque no mapa.':'Não foi possível obter sua posição. Busque o bairro ou marque no mapa.');
+    },{enableHighAccuracy:true,maximumAge:15000,timeout:20000});
+  }catch(e){stopGps();gpsMsg('A localização não está disponível aqui. Busque seu bairro ou marque no mapa.');}
+};
+
+/* ===== Viagem ===== */
+function spNow(){const p=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',hour:'numeric',minute:'numeric',hourCycle:'h23',weekday:'short'}).formatToParts(new Date());const g=t=>p.find(x=>x.type===t).value;let m=+g('hour')*60+ +g('minute');let wd=g('weekday');if(m<240){m+=1440;wd={Sun:'Sat',Mon:'Sun',Tue:'Mon',Wed:'Tue',Thu:'Wed',Fri:'Thu',Sat:'Fri'}[wd];}return {m,wd};}
+const departT=()=>S.when==='now'?spNow().m:S.T;
+const IC={
+ walk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M8 12l3-4 3 2 3 3M11 8l-1 6"/></svg>',
+ xfer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 16l-4-4 4-4M3 12h12M17 8l4 4-4 4"/></svg>',
+ down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v14M6 12l6 6 6-6"/></svg>',
+ flag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
+ you:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>'
+};
+function stepsHtml(t){
+  const out=[];const fromL=S.from.kind==='gps'?'sua localização':placeLabel(S.from);
+  out.push(`<li class="step"><span class="ic" style="color:var(--you)">${IC.you}</span><div><h4>Saia de ${esc(fromL)}</h4></div><div class="t">${fmt(t.t0)}</div></li>`);
+  if(t.access.w>0.5)out.push(`<li class="step"><span class="ic">${IC.walk}</span><div><h4>Caminhe até a estação ${esc(t.access.k)}</h4><p>${dist(t.access.d)} · ~${dur(t.access.w)}</p></div><div class="t">${fmt(t.t0+t.access.w)}</div></li>`);
+  t.legs.forEach((g,ix)=>{
+    if(g.walk){out.push(`<li class="step"><span class="ic">${IC.walk}</span><div><h4>Siga a pé até ${esc(g.to)}</h4><p>Passagem interna · ~${dur(g.t1-g.t0)}</p></div><div class="t">${fmt(g.t0)}</div></li>`);return;}
+    const prev=t.legs[ix-1];
+    if(prev&&!prev.walk){const w=TR[g.from]??4;out.push(`<li class="step"><span class="ic">${IC.xfer}</span><div><h4>Baldeação em ${esc(g.from)}</h4><p>Siga as placas da Linha ${g.s.line.id}-${g.s.line.nm} · ~${w} min${g.from==='Lapa'||g.from==='Água Branca'?' (é preciso sair e entrar na outra estação)':''}</p></div><div class="t"></div></li>`);}
+    const isLast=Math.abs(g.board-lastPass(g.s,g.dir,g.s.st.indexOf(g.from)))<0.01;
+    const wait=Math.round(g.board-(prev&&!prev.walk?prev.alight+(TR[g.from]??4):prev&&prev.walk?prev.t1:t.t0+t.access.w));
+    out.push(`<li class="step">${badge(g.s.line)}<div><h4>Pegue a Linha ${g.s.line.id}-${g.s.line.nm} sentido ${esc(dirName(g.s,g.dir))}</h4><p>Embarque em ${esc(g.from)}${wait>1?` · espera ~${dur(wait)}`:''}${isLast?' · <span class="flag">último trem</span>':''}</p></div><div class="t">${fmt(g.board)}</div></li>`);
+    out.push(`<li class="step down"><span class="ic">${IC.down}</span><div><h4>Desça em ${esc(g.to)}</h4><p>${g.stops} ${g.stops===1?'parada':'paradas'} · ${dur(g.alight-g.board)}</p></div><div class="t">${fmt(g.alight)}</div></li>`);
+  });
+  const lastA=t.arrive-t.egress.w;
+  if(t.egress.w>0.5)out.push(`<li class="step"><span class="ic">${IC.walk}</span><div><h4>Caminhe até ${esc(placeLabel(S.to))}</h4><p>Saindo da estação ${esc(t.egress.k)} · ${dist(t.egress.d)} · ~${dur(t.egress.w)}</p></div><div class="t">${fmt(lastA)}</div></li>`);
+  out.push(`<li class="step"><span class="ic end">${IC.flag}</span><div><h4>Chegada em ${esc(placeLabel(S.to))}</h4></div><div class="t">${fmt(t.arrive)}</div></li>`);
+  return `<ol class="steps">${out.join('')}</ol>`;
+}
+function gmaps(){const a=ptOf(S.from),b=ptOf(S.to);return `https://www.google.com/maps/dir/?api=1&origin=${a[0].toFixed(5)},${a[1].toFixed(5)}&destination=${b[0].toFixed(5)},${b[1].toFixed(5)}&travelmode=transit`;}
+function renderTrip(refit){
+  const el=$('vbody');S.trip=null;
+  $('wT').textContent=fmt(S.T);
+  if(!S.from||!S.to){el.innerHTML='<p class="note">Escolha de onde você sai e para onde vai. Dá para buscar um bairro, cidade, lugar ou estação, usar o GPS ou marcar no mapa.</p>';req();return;}
+  const t0=departT();let t=plan(M,S.from,S.to,t0),tomorrow=false;
+  if(t&&t.same){el.innerHTML='<p class="note">Origem e destino são a mesma estação.</p>';req();return;}
+  if(!t&&t0>=MID-5){const t2=plan(M,S.from,S.to,240);if(t2&&!t2.walk){t=t2;tomorrow=true;}}
+  let h='';
+  if(S.example)h+='<p class="note">Exemplo de trajeto. Troque a origem e o destino pelos seus.</p>';
+  if(!t){h+=`<div class="card"><div class="lead"><small>Sem opção</small>Não há trem agora</div><p class="note" style="margin-top:6px">Nenhuma combinação de linhas abertas liga esses pontos saindo às ${fmt(t0)}.</p></div>`;el.innerHTML=h;req();return;}
+  S.trip=t;
+  if(t.walk){h+=`<div class="card"><div class="lead"><small>Melhor opção</small>Vá a pé</div><div class="meta"><span><b>${dist(t.d)}</b></span><span>~<b>${dur(t.dw)}</b></span><span>chegada <b>${fmt(t.arrive)}</b></span></div><p class="note" style="margin-top:8px">A distância é curta; o trem não economiza tempo aqui.</p><div class="links"><a href="${gmaps().replace('transit','walking')}" target="_blank" rel="noopener">Ver a pé no Google Maps</a></div></div>`;}
+  else{
+    const rides=t.legs.filter(g=>!g.walk).length,xf=Math.max(0,rides-1);
+    const usesLast=t.legs.some(g=>!g.walk&&Math.abs(g.board-lastPass(g.s,g.dir,g.s.st.indexOf(g.from)))<0.01);
+    h+=`<div class="card"><div class="lead"><small>${tomorrow?'Rede fechada · primeira opção':'Chegada estimada'}</small>${fmt(t.arrive)}</div>
+      <div class="meta"><span>saída <b>${fmt(t.t0)}</b></span><span><b>${dur(t.arrive-t.t0)}</b> no total</span><span><b>${xf}</b> ${xf===1?'baldeação':'baldeações'}</span><span>a pé <b>${dur(t.access.w+t.egress.w)}</b></span></div>
+      <div class="badges" style="margin-top:8px">${t.legs.filter(g=>!g.walk).map(g=>badge(g.s.line,true)).join('<span class="note">›</span>')}</div>
+      ${usesLast?'<p class="note warn" style="margin-top:8px">Este trajeto depende do último trem de uma linha. Não se atrase.</p>':''}
+      ${t.access.d>2?`<p class="note warn" style="margin-top:8px">A estação mais próxima fica a ${dist(t.access.d)}. Talvez valha um ônibus ou app até ela.</p>`:''}
+      ${stepsHtml(t)}
+      <div class="links"><a href="${gmaps()}" target="_blank" rel="noopener">Conferir no Google Maps</a></div></div>`;
+    const L=latestTrip(M,S.from,S.to);
+    if(L)h+=`<div class="card"><div class="eyebrow">Última saída hoje</div><div class="lead" style="font-size:24px;margin-top:4px">${L.all?'Madrugada toda':'Até '+fmt(L.t)}</div><p class="note" style="margin-top:4px">${L.all?'A madrugada 24h liga esse trajeto (estimativa).':`Saindo até ${fmt(L.t)} ainda dá para chegar de trem.${!tomorrow&&L.t>=t0?' Você tem '+dur(L.t-t0)+' de folga.':''}`}</p></div>`;
+  }
+  el.innerHTML=h;
+  if(refit&&W){const pts=[ptOf(S.from),ptOf(S.to)];if(t.legs)t.legs.forEach(g=>{pts.push(ST[g.from],ST[g.to]);});fitPts(pts);}
+  req();
+}
+$('wNow').onclick=()=>{S.when='now';$('wNow').setAttribute('aria-pressed','true');$('wSlider').setAttribute('aria-pressed','false');renderTrip(false);};
+$('wSlider').onclick=()=>{S.when='slider';$('wSlider').setAttribute('aria-pressed','true');$('wNow').setAttribute('aria-pressed','false');renderTrip(false);};
+setInterval(()=>{if(S.tab==='viagem'&&S.when==='now'&&!S.playing)renderTrip(false);},60000);
+
+/* ===== Linhas e estação ===== */
+function lineStatus(L){
+  const s=M.services.find(x=>x.line===L&&x.si===0),T=S.T;
+  if(s.closed)return {cls:'off',txt:'Fechada hoje',sub:s.why};
+  if(T<s.O)return {cls:'off',txt:'Ainda fechada',sub:`Abre às ${fmt(s.O)}`,big:fmt(s.O),bigSub:'em '+dur(s.O-T)};
+  if(s.open24)return {cls:'ok',txt:T<MID?'Embarque aberto':'Madrugada 24h',sub:'Após 0h, trens a cada ~25 min'};
+  const arrive=s.C+s.total;
+  if(T<=s.C)return {cls:'ok',txt:'Embarque aberto',sub:`Trens a cada ~${hwAt(L,M.day,T)} min · fecha às ${fmt(s.C)}`,big:fmt(s.C),bigSub:'em '+dur(s.C-T)};
+  if(T<arrive)return {cls:'warn',txt:'Só desembarque',sub:`Últimos trens nos terminais às ${fmt(arrive)}`,big:fmt(arrive),bigSub:'fim em '+dur(arrive-T)};
+  return {cls:'end',txt:'Encerrada',sub:`Último trem chegou às ${fmt(arrive)}`,big:'—',bigSub:''};
+}
+function renderLines(){
+  const groups=[['Metrô e concessionárias',['1','2','3','4','5','6','15','17']],['Trens metropolitanos',['7','8','9','10','11','12','13']]];
+  $('p-linhas').innerHTML=groups.map(([g,ids])=>`<div class="group"><div class="eyebrow">${g}</div>${ids.map(id=>{const L=LINES.find(l=>l.id===id),st=lineStatus(L),s=M.services.find(x=>x.line===L&&x.si===0);
+    return `<div class="lrow">${badge(L)}<div style="min-width:0"><div class="nm">${L.id}-${L.nm} <span class="pill ${st.cls}" style="margin-left:4px">${st.txt}</span></div><div class="sub">${esc(s.st[0])} ↔ ${esc(s.st[s.st.length-1])} · ${L.op} · ${esc(L.hours)}</div><div class="sub">${esc(st.sub)}</div></div><div class="rt">${st.big?`<div class="big">${st.big}</div><small>${st.bigSub}</small>`:''}</div></div>`;}).join('')}</div>`).join('');
+}
+function selectStation(k){S.sel=k;$('stq').value=k;setTab('estacao');}
+function computeReach(){S.reach=S.sel?earliest(M,S.sel,S.T,S.T>MID):null;}
+function renderStation(){
+  const k=S.sel,el=$('stbody');if(!k||!M.at[k]){el.innerHTML='<p class="note">Escolha uma estação no mapa ou na busca.</p>';return;}
+  const T=S.T,Ls=linesAt(k),alias=ALIAS.find(a=>a[0]===k||a[1]===k);
+  let h=`<div class="card sthead"><div class="badges">${Ls.map(L=>badge(L,true)).join('')}</div><h2>${esc(k)}</h2>`;
+  if(alias)h+=`<p class="note">Ligada a ${esc(alias[0]===k?alias[1]:alias[0])} por passagem interna (~${alias[2]} min).</p>`;
+  if(Ls.length>1)h+=`<p class="note">Baldeação estimada: ~${TR[k]??4} min${k==='Lapa'||k==='Água Branca'?' (é preciso sair e entrar na outra estação)':''}.</p>`;
+  h+='</div>';
+  const n=S.reach?Object.keys(S.reach.arr).length-1:0,tot=KEYS.filter(x=>M.at[x]).length-1;
+  const gateClosed=T>MID&&!(M.at[k]||[]).some(x=>x.s.open24);
+  h+=`<div class="card"><div class="eyebrow">Alcance às ${fmt(T)}</div><div class="reach"><b>${n}</b><span class="note">de ${tot} estações dá para alcançar daqui</span></div>${gateClosed?'<p class="note warn">Embarque fechado às 0h. O alcance vale para quem já está dentro da rede, fazendo baldeação.</p>':''}<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn primary" id="goFrom">Sair daqui</button><button class="btn" id="goTo">Ir para cá</button></div></div>`;
+  h+=`<div class="eyebrow" style="margin-top:6px">Trens por sentido às ${fmt(T)}</div>`;
+  for(const {s,i} of M.at[k]){
+    h+=`<div class="card"><div class="svhead">${badge(s.line,true)} Linha ${s.line.id}-${s.line.nm}</div>`;
+    if(s.closed){h+=`<p class="note">${esc(s.why)}</p></div>`;continue;}
+    for(const dir of [1,-1]){
+      if((dir>0&&i===s.st.length-1)||(dir<0&&i===0))continue;
+      const o=off(s,dir,i),lp=lastPass(s,dir,i),nd=nextDep(s,T-o),nx=nd!==null?nd+o:null;
+      let right;
+      if(T<s.O)right=`<div class="tt">${nx?fmt(nx):'—'}<small style="color:var(--muted)">primeiro trem</small></div>`;
+      else if(s.open24&&T>=MID-60)right=`<div class="tt">${nx?fmt(nx):'—'}<small style="color:var(--ok)">próximo · 24h</small></div>`;
+      else if(lp>=T){right=`<div class="tt">${fmt(lp)}<small style="color:${lp-T<20?'var(--warn)':'var(--ok)'}">último em ${dur(lp-T)}</small>${nx!==null&&nx<lp-0.5?`<small style="color:var(--muted);font-family:var(--f-mono)">próximo ~${fmt(nx)}</small>`:''}</div>`;}
+      else right=`<div class="tt" style="color:var(--muted)">${fmt(lp)}<small style="color:var(--end)">último já passou</small></div>`;
+      h+=`<div class="drow"><div class="to">Sentido ${esc(dirName(s,dir))}<span>${s.si>0?'Ramal · ':''}último trem chega ao terminal às ${fmt(s.C+s.total)}</span></div>${right}</div>`;
+    }
+    h+='</div>';
+  }
+  el.innerHTML=h;
+  $('goFrom').onclick=()=>{stopGps();setEnd('from',{kind:'station',key:k});};
+  $('goTo').onclick=()=>setEnd('to',{kind:'station',key:k});
+}
+function setTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));['viagem','estacao','linhas'].forEach(x=>$('p-'+x).hidden=x!==t);
+  if(t!=='viagem')endPick();
+  if(t==='viagem')renderTrip(true);if(t==='estacao'){computeReach();renderStation();}if(t==='linhas')renderLines();req();}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+
+let lastSum='';
+function updateSummary(){
+  const T=S.T;let open=0,run=0;
+  for(const L of LINES){const s=M.services.find(x=>x.line===L&&x.si===0);if(s.closed)continue;if((T>=s.O&&T<=s.C)||(s.open24&&T>=s.O))open++;if(T>=s.O&&T<s.C+s.total)run++;}
+  const txt=open?`<b>${open}</b> de ${LINES.length} linhas com embarque · <b>${trainCount}</b> trens rodando`:run?`Embarque fechado · <b>${run}</b> linhas com trens a caminho`:`Rede fechada · abre às 4:00 (trens) e 4:40 (metrô)`;
+  if(txt!==lastSum){$('summary').innerHTML=txt;lastSum=txt;}
+}
+
+/* ===== Hora e controles ===== */
+function setT(t,fromSlider){S.T=Math.max(TMIN,Math.min(TMAX,t));$('clock').textContent=fmt(S.T);if(!fromSlider)$('tr').value=Math.round(S.T);$('wT').textContent=fmt(S.T);
+  if(S.tab==='linhas')renderLines();if(S.tab==='estacao'){computeReach();renderStation();}if(S.tab==='viagem'&&S.when==='slider'&&!S.playing)renderTrip(false);req();}
+$('tr').addEventListener('input',e=>setT(+e.target.value,true));
+let last=0;function loop(ts){if(!S.playing)return;if(last){const dt=ts-last;let t=S.T+dt/60;if(t>=TMAX){t=TMAX;S.playing=false;playIcon();}setT(t);}last=ts;requestAnimationFrame(loop);}
+function playIcon(){$('play').innerHTML=S.playing?'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>';$('play').setAttribute('aria-label',S.playing?'Pausar':'Reproduzir o dia');if(!S.playing&&S.tab==='viagem'&&S.when==='slider')renderTrip(false);}
+$('play').onclick=()=>{S.playing=!S.playing;if(S.playing&&S.T>=TMAX)setT(TMIN);last=0;playIcon();if(S.playing)requestAnimationFrame(loop);};
+$('nowBtn').onclick=()=>{const {m}=spNow();if(m<TMIN||m>TMAX){setT(TMIN);$('nowBtn').textContent='Rede fechada';setTimeout(()=>$('nowBtn').textContent='Agora',1800);}else setT(m);};
+function setDay(d){S.day=d;document.querySelectorAll('.chip').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.day===d));$('m24').hidden=d!==1;if(d!==1)S.mode24=false;$('m24').setAttribute('aria-pressed',S.mode24);M=buildModel(S.day,S.mode24);setT(S.T);if(S.tab==='viagem')renderTrip(false);}
+document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>setDay(+b.dataset.day));
+$('m24').onclick=()=>{S.mode24=!S.mode24;$('m24').setAttribute('aria-pressed',S.mode24);M=buildModel(S.day,S.mode24);setT(S.T);if(S.tab==='viagem')renderTrip(false);};
+$('themeBtn').onclick=()=>{document.documentElement.dataset.theme=isDark()?'light':'dark';};
+function refreshColors(){if(S.tab==='linhas')renderLines();else if(S.tab==='estacao')renderStation();else renderTrip(false);req();}
+matchMedia('(prefers-color-scheme: light)').addEventListener('change',refreshColors);
+new MutationObserver(refreshColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+(function init(){
+  const {m,wd}=spNow();const d=wd==='Sat'?1:wd==='Sun'?2:0;
+  S.T=(m>=TMIN&&m<=TMAX)?m:1410;
+  syncInputs();setDay(d);setTab('viagem');
+})();
+</script>
+
+</body>
+</html>
