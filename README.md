@@ -4,4 +4,6 @@ Mapa interativo e planejador de viagem do Metrô, CPTM e linhas concedidas de S�
 
 **No ar:** https://ferrovia-sp.vercel.app
 
+![Planejador de viagem com rota e baldeações](images/planejador.jpg)
+
 Site estático (um único `index.html`). Os horários são estimativas; confira nos canais oficiais antes de contar com o último trem.
